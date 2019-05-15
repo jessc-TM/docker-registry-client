@@ -2,9 +2,11 @@ package registry
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type TokenTransport struct {
@@ -25,7 +27,8 @@ func (t *TokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type authToken struct {
-	Token string `json:"token"`
+	Token       string `json:"token"`
+	AccessToken string `json:"access_token"`
 }
 
 func (t *TokenTransport) authAndRetry(authService *authService, req *http.Request) (*http.Response, error) {
@@ -39,24 +42,51 @@ func (t *TokenTransport) authAndRetry(authService *authService, req *http.Reques
 }
 
 func (t *TokenTransport) auth(authService *authService) (string, *http.Response, error) {
-	authReq, err := authService.Request(t.Username, t.Password)
-	if err != nil {
-		return "", nil, err
-	}
-
 	client := http.Client{
 		Transport: t.Transport,
 	}
 
-	response, err := client.Do(authReq)
+	// Don't proactively send Basic authentication as the target may not support it.
+	authReq, err := authService.Request("", "")
 	if err != nil {
 		return "", nil, err
+	}
+
+	response, err := client.Do(authReq)
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+	}
+
+	if err != nil {
+		return "", nil, err
+	}
+
+	if response.StatusCode == http.StatusUnauthorized {
+		authHeader := response.Header.Get("WWW-Authenticate")
+
+		// If there's no WWW-Authenticate header, then hope that it supports Basic authentication.
+		// If the first WWW-Authenticate header indicates support for Basic auth, then use Basic.
+		// Otherwise fall through as not OK.
+		if authHeader == "" || strings.HasPrefix(strings.ToLower(authHeader), "basic") {
+			authReq, err := authService.Request(t.Username, t.Password)
+			if err != nil {
+				return "", nil, err
+			}
+
+			response, err = client.Do(authReq)
+			if response != nil && response.Body != nil {
+				defer response.Body.Close()
+			}
+
+			if err != nil {
+				return "", nil, err
+			}
+		}
 	}
 
 	if response.StatusCode != http.StatusOK {
 		return "", response, err
 	}
-	defer response.Body.Close()
 
 	var authToken authToken
 	decoder := json.NewDecoder(response.Body)
@@ -65,7 +95,18 @@ func (t *TokenTransport) auth(authService *authService) (string, *http.Response,
 		return "", nil, err
 	}
 
-	return authToken.Token, nil, nil
+	// If we got `{"token":"value"}` then return the token.
+	if authToken.Token != "" {
+		return authToken.Token, nil, nil
+	}
+
+	// If we got `{"access_token":"value"}` then return the token.
+	if authToken.AccessToken != "" {
+		return authToken.AccessToken, nil, nil
+	}
+
+	// Give up here and report an error
+	return "", nil, errors.New("unable to extract token")
 }
 
 func (t *TokenTransport) retry(req *http.Request, token string) (*http.Response, error) {
