@@ -141,6 +141,51 @@ func Test_AuthenticationDance(t *testing.T) {
 			},
 		},
 		{
+			name: "GCR",
+			handler: func(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
+				return func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Path == "/v2/" {
+						auth := r.Header.Get("Authorization")
+						if auth == "" {
+							w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="http://%v/v2/token",service="%v"`, r.Host, r.Host))
+							w.WriteHeader(http.StatusUnauthorized)
+							return
+						}
+						if auth != "Bearer token" {
+							t.Errorf("invalid token in ping request")
+							w.WriteHeader(http.StatusInternalServerError)
+							return
+						}
+
+						return
+					}
+
+					if r.URL.Path == "/v2/token" {
+						auth := r.Header.Get("Authorization")
+						if auth == "" {
+							// GCR sends a request for Bearer authentication at the token service if we don't pre-emptively provide an Authorization header
+							w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="http://%v/v2/token",service="%v"`, r.Host, r.Host))
+							w.WriteHeader(http.StatusUnauthorized)
+							return
+						}
+						if auth != "Basic dXNlcm5hbWU6cGFzc3dvcmQ=" {
+							t.Errorf("invalid credentials in oauth authentication request")
+							w.WriteHeader(http.StatusInternalServerError)
+							return
+						}
+						w.Write([]byte(`{"expires_in":43200,"token":"token"}`))
+						return
+					}
+					t.Errorf("unexpected path = %v", r.URL.Path)
+				}
+			},
+			checker: func(t *testing.T, err error) {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			},
+		},
+		{
 			name: "Token extract error",
 			handler: func(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
 				return func(w http.ResponseWriter, r *http.Request) {

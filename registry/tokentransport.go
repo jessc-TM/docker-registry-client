@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 type TokenTransport struct {
@@ -46,8 +45,8 @@ func (t *TokenTransport) auth(authService *authService) (string, *http.Response,
 		Transport: t.Transport,
 	}
 
-	// Don't proactively send Basic authentication as the target may not support it.
-	authReq, err := authService.Request("", "")
+	// Pre-emptively send Basic authentication credentials as some services need them.
+	authReq, err := authService.Request(t.Username, t.Password)
 	if err != nil {
 		return "", nil, err
 	}
@@ -59,29 +58,6 @@ func (t *TokenTransport) auth(authService *authService) (string, *http.Response,
 
 	if err != nil {
 		return "", nil, err
-	}
-
-	if response.StatusCode == http.StatusUnauthorized {
-		authHeader := response.Header.Get("WWW-Authenticate")
-
-		// If there's no WWW-Authenticate header, then hope that it supports Basic authentication.
-		// If the first WWW-Authenticate header indicates support for Basic auth, then use Basic.
-		// Otherwise fall through as not OK.
-		if authHeader == "" || strings.HasPrefix(strings.ToLower(authHeader), "basic") {
-			authReq, err := authService.Request(t.Username, t.Password)
-			if err != nil {
-				return "", nil, err
-			}
-
-			response, err = client.Do(authReq)
-			if response != nil && response.Body != nil {
-				defer response.Body.Close()
-			}
-
-			if err != nil {
-				return "", nil, err
-			}
-		}
 	}
 
 	if response.StatusCode != http.StatusOK {
