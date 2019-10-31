@@ -42,6 +42,7 @@ func (registry *Registry) StreamRepositories(ctx context.Context) (<-chan string
 		var err error //We create this here, otherwise url will be rescoped with :=
 		var response repositoriesResponse
 
+		gotSome := false
 		for {
 			select {
 			case <-ctx.Done():
@@ -51,92 +52,32 @@ func (registry *Registry) StreamRepositories(ctx context.Context) (<-chan string
 				regurl, err = registry.getPaginatedJson(regurl, &response)
 				switch err {
 				case ErrNoMorePages:
+					// If we have not gotten anything yet and we get 0 repositories back, it could be because
+					// there are legitimately 0 repositories or it could be because the registry is DTR and it
+					// wants us to use the DTR API instead.
+					//
+					// If the fallback fails, we'll assume that there are legitimately 0 repositories and return
+					// without an error.
+					if !gotSome && len(response.Repositories) == 0 {
+						_ = registry.tryFallback(ctx, regChan, errChan)
+						return
+					}
 					streamRegistryAPIRepositoriesPage(ctx, regChan, response.Repositories)
 					return
+
 				case nil:
+					gotSome = true
 					if !streamRegistryAPIRepositoriesPage(ctx, regChan, response.Repositories) {
 						return
 					}
 					continue
+
 				default:
 					if ue, ok := err.(*url.Error); ok {
 						if he, ok := ue.Err.(*HttpStatusError); ok {
 							if he.Response.StatusCode == http.StatusUnauthorized {
-								regurl = registry.url("/api/v0/repositories/")
-								registry.Logf("attempting DTR fallback at %v", regurl)
-
-								gotSome := false
-								for {
-									var err2 error
-
-									select {
-									case <-ctx.Done():
-										return
-									default:
-										dtrRepositories := struct {
-											Repositories []dtrRepository `json:"repositories"`
-										}{}
-
-										regurl, err2 = registry.getPaginatedJson(regurl, &dtrRepositories)
-
-										switch err2 {
-										case ErrNoMorePages:
-											gotSome = true
-											streamDTRAPIRepositoriesPage(ctx, regChan, dtrRepositories.Repositories)
-											return
-										case nil:
-											gotSome = true
-											if !streamDTRAPIRepositoriesPage(ctx, regChan, dtrRepositories.Repositories) {
-												return
-											}
-											continue
-										default:
-											if gotSome {
-												// we got something successfully but now we're failing, return the current error
-												errChan <- err2
-												return
-											}
-
-											// try Harbor fallback
-											regurl = registry.url("/api/projects")
-											registry.Logf("attempting Harbor fallback at %v", regurl)
-											gotSome := false
-											for {
-												var err3 error
-												select {
-												case <-ctx.Done():
-													return
-												default:
-													harborProjects := []harborProject{}
-
-													regurl, err3 = registry.getPaginatedJson(regurl, &harborProjects)
-
-													switch err3 {
-													case ErrNoMorePages:
-														gotSome = true
-														streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects)
-														return
-													case nil:
-														gotSome = true
-														if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects) {
-															return
-														}
-														continue
-													default:
-														if gotSome {
-															// we got something successfully but now we're failing, return the current error
-															errChan <- err3
-															return
-														}
-
-														// the fallbacks didn't work, return the original error
-														errChan <- err
-														return
-													}
-												}
-											}
-										}
-									}
+								if fallbackErr := registry.tryFallback(ctx, regChan, errChan); fallbackErr == nil {
+									return
 								}
 							}
 						}
@@ -150,6 +91,84 @@ func (registry *Registry) StreamRepositories(ctx context.Context) (<-chan string
 	}()
 
 	return regChan, errChan
+}
+
+func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, errChan chan error) error {
+	regurl := registry.url("/api/v0/repositories/")
+	registry.Logf("attempting DTR fallback at %v", regurl)
+
+	gotSome := false
+	for {
+		var err2 error
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			dtrRepositories := struct {
+				Repositories []dtrRepository `json:"repositories"`
+			}{}
+
+			regurl, err2 = registry.getPaginatedJson(regurl, &dtrRepositories)
+
+			switch err2 {
+			case ErrNoMorePages:
+				gotSome = true
+				streamDTRAPIRepositoriesPage(ctx, regChan, dtrRepositories.Repositories)
+				return nil
+			case nil:
+				gotSome = true
+				if !streamDTRAPIRepositoriesPage(ctx, regChan, dtrRepositories.Repositories) {
+					return nil
+				}
+				continue
+			default:
+				if gotSome {
+					// we got something successfully but now we're failing, return the current error
+					errChan <- err2
+					return nil
+				}
+
+				// try Harbor fallback
+				regurl = registry.url("/api/projects")
+				registry.Logf("attempting Harbor fallback at %v", regurl)
+				gotSome := false
+				for {
+					var err3 error
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					default:
+						harborProjects := []harborProject{}
+
+						regurl, err3 = registry.getPaginatedJson(regurl, &harborProjects)
+
+						switch err3 {
+						case ErrNoMorePages:
+							gotSome = true
+							streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects)
+							return nil
+						case nil:
+							gotSome = true
+							if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects) {
+								return nil
+							}
+							continue
+						default:
+							if gotSome {
+								// we got something successfully but now we're failing, return the current error
+								errChan <- err3
+								return nil
+							}
+
+							// the fallbacks didn't work, return the original error
+							return fmt.Errorf("fallback didn't work")
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 type dtrRepository struct {

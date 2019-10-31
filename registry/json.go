@@ -69,5 +69,17 @@ func getNextLink(base string, resp *http.Response) (string, error) {
 			}
 		}
 	}
+
+	// DTR now uses an `X-Next-Page-Start` header instead of the standard `Link` header;
+	// the value is meant to be used in the `pageStart` query parameter for the next request.
+	if nextPage := resp.Header.Get("X-Next-Page-Start"); nextPage != "" {
+		baseURL, _ := url.Parse(base)
+		q := baseURL.Query()
+		q.Set("pageStart", nextPage)
+		baseURL.RawQuery = q.Encode()
+
+		return baseURL.String(), nil
+	}
+
 	return "", ErrNoMorePages
 }

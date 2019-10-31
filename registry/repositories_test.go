@@ -30,6 +30,11 @@ func Test_Registry_Repositories(t *testing.T) {
 		expected []string
 	}{
 		{
+			name:     "dtr",
+			handler:  dtrDataSource,
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
+		{
 			name:     "harbor",
 			handler:  harborDataSource,
 			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
@@ -59,6 +64,33 @@ func Test_Registry_Repositories(t *testing.T) {
 				t.Errorf("Got %v but expected %v", repos, tc.expected)
 			}
 		})
+	}
+}
+
+func dtrDataSource(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("dtrDataSource test handler got request for %v", r.URL.String())
+		if r.URL.Path == "/v2/_catalog" {
+			w.Header().Add("Content-Type", "application/json; charset=utf-8")
+			_, _ = w.Write([]byte(`{"repositories": []}`))
+			return
+		}
+
+		if r.URL.Path == "/api/v0/repositories/" {
+			w.Header().Add("Content-Type", "application/json; charset=utf-8")
+
+			switch r.URL.Query().Get("pageStart") {
+			case "":
+				w.Header().Add("X-Next-Page-Start", "0000-repo2")
+				_, _ = w.Write([]byte(`{"repositories":[{"namespace":"project2","name":"repo1"}]}`))
+			case "0000-repo2":
+				_, _ = w.Write([]byte(`{"repositories":[{"namespace":"project2","name":"repo2"},{"namespace":"project3","name":"repo1"},{"namespace":"project3","name":"repo2"},{"namespace":"project4","name":"repo1"},{"namespace":"project4","name":"repo2"}]}`))
+			}
+
+			return
+		}
+
+		w.WriteHeader(http.StatusPaymentRequired)
 	}
 }
 
