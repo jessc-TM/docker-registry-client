@@ -131,7 +131,7 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 
 				// try Harbor fallback
 				regurl = registry.url("/api/projects")
-				registry.Logf("attempting Harbor fallback at %v", regurl)
+				registry.Logf("got error %v, attempting Harbor fallback at %v", err2, regurl)
 				gotSome := false
 				for {
 					var err3 error
