@@ -12,7 +12,9 @@ import (
 
 func (registry *Registry) Manifest(repository, reference string) (*manifestV1.SignedManifest, error) {
 	url := registry.url("/v2/%s/manifests/%s", repository, reference)
+
 	registry.Logf("registry.manifest.get url=%s repository=%s reference=%s", url, repository, reference)
+	registry.resetToken()
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -42,7 +44,9 @@ func (registry *Registry) Manifest(repository, reference string) (*manifestV1.Si
 
 func (registry *Registry) ManifestV2(repository, reference string) (*manifestV2.DeserializedManifest, error) {
 	url := registry.url("/v2/%s/manifests/%s", repository, reference)
+
 	registry.Logf("registry.manifest.get url=%s repository=%s reference=%s", url, repository, reference)
+	registry.resetToken()
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -71,7 +75,9 @@ func (registry *Registry) ManifestV2(repository, reference string) (*manifestV2.
 
 func (registry *Registry) ManifestDigest(repository, reference string) (digest.Digest, error) {
 	url := registry.url("/v2/%s/manifests/%s", repository, reference)
+
 	registry.Logf("registry.manifest.head url=%s repository=%s reference=%s", url, repository, reference)
+	registry.resetToken()
 
 	resp, err := registry.Client.Head(url)
 	if resp != nil {
@@ -85,7 +91,9 @@ func (registry *Registry) ManifestDigest(repository, reference string) (digest.D
 
 func (registry *Registry) DeleteManifest(repository string, digest digest.Digest) error {
 	url := registry.url("/v2/%s/manifests/%s", repository, digest)
+
 	registry.Logf("registry.manifest.delete url=%s repository=%s reference=%s", url, repository, digest)
+	registry.resetToken()
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
@@ -103,7 +111,9 @@ func (registry *Registry) DeleteManifest(repository string, digest digest.Digest
 
 func (registry *Registry) PutManifest(repository, reference string, signedManifest *manifestV1.SignedManifest) error {
 	url := registry.url("/v2/%s/manifests/%s", repository, reference)
+
 	registry.Logf("registry.manifest.put url=%s repository=%s reference=%s", url, repository, reference)
+	registry.resetToken()
 
 	body, err := signedManifest.MarshalJSON()
 	if err != nil {

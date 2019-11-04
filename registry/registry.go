@@ -103,6 +103,16 @@ func newFromTransport(registryUrl, username, password string, transport http.Rou
 	return registry, nil
 }
 
+func (r *Registry) resetToken() {
+	if errorTransport, ok := r.Client.Transport.(*ErrorTransport); ok {
+		if basicAuthTransport, ok := errorTransport.Transport.(*BasicTransport); ok {
+			if tokenTransport, ok := basicAuthTransport.Transport.(*TokenTransport); ok {
+				tokenTransport.token = ""
+			}
+		}
+	}
+}
+
 func (r *Registry) url(pathTemplate string, args ...interface{}) string {
 	pathSuffix := fmt.Sprintf(pathTemplate, args...)
 	url := fmt.Sprintf("%s%s", r.URL, pathSuffix)

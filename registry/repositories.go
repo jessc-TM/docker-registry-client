@@ -33,6 +33,8 @@ func (registry *Registry) StreamRepositories(ctx context.Context) (<-chan string
 	regChan := make(chan string)
 	errChan := make(chan error)
 
+	registry.resetToken()
+
 	go func() {
 		// defer close(errChan)
 		defer close(regChan)

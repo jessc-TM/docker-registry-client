@@ -11,7 +11,9 @@ import (
 
 func (registry *Registry) DownloadLayer(repository string, digest digest.Digest) (io.ReadCloser, error) {
 	url := registry.url("/v2/%s/blobs/%s", repository, digest)
+
 	registry.Logf("registry.layer.download url=%s repository=%s digest=%s", url, repository, digest)
+	registry.resetToken()
 
 	resp, err := registry.Client.Get(url)
 	if err != nil {
@@ -22,6 +24,8 @@ func (registry *Registry) DownloadLayer(repository string, digest digest.Digest)
 }
 
 func (registry *Registry) UploadLayer(repository string, digest digest.Digest, content io.Reader) error {
+	registry.resetToken()
+
 	uploadUrl, err := registry.initiateUpload(repository)
 	if err != nil {
 		return err
@@ -45,6 +49,7 @@ func (registry *Registry) UploadLayer(repository string, digest digest.Digest, c
 func (registry *Registry) HasLayer(repository string, digest digest.Digest) (bool, error) {
 	checkUrl := registry.url("/v2/%s/blobs/%s", repository, digest)
 	registry.Logf("registry.layer.check url=%s repository=%s digest=%s", checkUrl, repository, digest)
+	registry.resetToken()
 
 	resp, err := registry.Client.Head(checkUrl)
 	if resp != nil {
@@ -72,6 +77,7 @@ func (registry *Registry) HasLayer(repository string, digest digest.Digest) (boo
 func (registry *Registry) LayerMetadata(repository string, digest digest.Digest) (distribution.Descriptor, error) {
 	checkUrl := registry.url("/v2/%s/blobs/%s", repository, digest)
 	registry.Logf("registry.layer.check url=%s repository=%s digest=%s", checkUrl, repository, digest)
+	registry.resetToken()
 
 	resp, err := registry.Client.Head(checkUrl)
 	if resp != nil {
@@ -90,6 +96,7 @@ func (registry *Registry) LayerMetadata(repository string, digest digest.Digest)
 func (registry *Registry) initiateUpload(repository string) (*url.URL, error) {
 	initiateUrl := registry.url("/v2/%s/blobs/uploads/", repository)
 	registry.Logf("registry.layer.initiate-upload url=%s repository=%s", initiateUrl, repository)
+	registry.resetToken()
 
 	resp, err := registry.Client.Post(initiateUrl, "application/octet-stream", nil)
 	if resp != nil {

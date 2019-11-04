@@ -7,6 +7,8 @@ type tagsResponse struct {
 func (registry *Registry) Tags(repository string) (tags []string, err error) {
 	url := registry.url("/v2/%s/tags/list", repository)
 
+	registry.resetToken()
+
 	var response tagsResponse
 	for {
 		registry.Logf("registry.tags url=%s repository=%s", url, repository)
