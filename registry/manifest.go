@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	manifestV1 "github.com/docker/distribution/manifest/schema1"
 	manifestV2 "github.com/docker/distribution/manifest/schema2"
@@ -79,7 +80,19 @@ func (registry *Registry) ManifestDigest(repository, reference string) (digest.D
 	registry.Logf("registry.manifest.head url=%s repository=%s reference=%s", url, repository, reference)
 	registry.resetToken()
 
-	resp, err := registry.Client.Head(url)
+	req, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Accept", strings.Join([]string{
+		manifestV2.MediaTypeManifest,
+		manifestV1.MediaTypeManifest,
+		"application/vnd.docker.distribution.manifest.v1+prettyjws",
+		"application/vnd.docker.distribution.manifest.list.v2+json",
+	}, ", "))
+
+	resp, err := registry.Client.Do(req)
 	if resp != nil {
 		defer resp.Body.Close()
 	}
