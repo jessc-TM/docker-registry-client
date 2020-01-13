@@ -113,6 +113,14 @@ func (r *Registry) resetToken() {
 	}
 }
 
+func (r *Registry) useBasicPreAuth() {
+	if errorTransport, ok := r.Client.Transport.(*ErrorTransport); ok {
+		if basicAuthTransport, ok := errorTransport.Transport.(*BasicTransport); ok {
+			basicAuthTransport.preAuth = true
+		}
+	}
+}
+
 func (r *Registry) url(pathTemplate string, args ...interface{}) string {
 	pathSuffix := fmt.Sprintf(pathTemplate, args...)
 	url := fmt.Sprintf("%s%s", r.URL, pathSuffix)

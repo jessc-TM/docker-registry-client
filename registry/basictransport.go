@@ -10,9 +10,15 @@ type BasicTransport struct {
 	URL       string
 	Username  string
 	Password  string
+
+	preAuth bool
 }
 
 func (t *BasicTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.preAuth && (t.Username != "" || t.Password != "") {
+		req.SetBasicAuth(t.Username, t.Password)
+	}
+
 	resp, err := t.Transport.RoundTrip(req)
 	if err != nil {
 		return resp, err

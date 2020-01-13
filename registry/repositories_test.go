@@ -121,8 +121,8 @@ func harborDataSource(t *testing.T) func(w http.ResponseWriter, r *http.Request)
 
 		if r.URL.Path == "/api/projects" {
 			if h, ok := r.Header["Authorization"]; !ok || len(h) < 1 || h[0] != "Basic dXNlcjpwYXNz" {
-				w.Header().Set("WWW-Authenticate", "Basic")
-				w.WriteHeader(http.StatusUnauthorized)
+				w.WriteHeader(http.StatusForbidden)
+				t.Fatal("should use basic pre-auth for Harbor")
 				return
 			}
 
