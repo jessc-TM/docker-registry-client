@@ -30,8 +30,18 @@ func Test_Registry_Repositories(t *testing.T) {
 		expected []string
 	}{
 		{
-			name:     "dtr",
-			handler:  dtrDataSource,
+			name:     "dtr with 0 repositories in the _catalog response",
+			handler:  dtrDataSource(0),
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
+		{
+			name:     "dtr with 1 page in the _catalog response",
+			handler:  dtrDataSource(1),
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
+		{
+			name:     "dtr with multiple pages in the _catalog response",
+			handler:  dtrDataSource(2),
 			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
 		},
 		{
@@ -67,30 +77,55 @@ func Test_Registry_Repositories(t *testing.T) {
 	}
 }
 
-func dtrDataSource(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("dtrDataSource test handler got request for %v", r.URL.String())
-		if r.URL.Path == "/v2/_catalog" {
-			w.Header().Add("Content-Type", "application/json; charset=utf-8")
-			_, _ = w.Write([]byte(`{"repositories": []}`))
-			return
-		}
-
-		if r.URL.Path == "/api/v0/repositories/" {
-			w.Header().Add("Content-Type", "application/json; charset=utf-8")
-
-			switch r.URL.Query().Get("pageStart") {
-			case "":
-				w.Header().Add("X-Next-Page-Start", "0000-repo2")
-				_, _ = w.Write([]byte(`{"repositories":[{"namespace":"project2","name":"repo1"}]}`))
-			case "0000-repo2":
-				_, _ = w.Write([]byte(`{"repositories":[{"namespace":"project2","name":"repo2"},{"namespace":"project3","name":"repo1"},{"namespace":"project3","name":"repo2"},{"namespace":"project4","name":"repo1"},{"namespace":"project4","name":"repo2"}]}`))
+// We've learned that sometimes DTR returns no repositories in the response to
+// /v2/_catalog, and sometimes it returns some repositories (but not all). Either
+// way, we want to use /api/v0/repositories instead.
+func dtrDataSource(catalogPages int) func(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
+	return func(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
+		return func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("dtrDataSource test handler got request for %v", r.URL.String())
+			if r.Header.Get("Authorization") == "" {
+				w.Header().Set("Www-Authenticate", fmt.Sprintf(`Bearer realm="https://%v/auth/token",service="dtr",scope="registry:catalog:*"`, r.Host))
+				w.WriteHeader(http.StatusUnauthorized)
+				return
 			}
 
-			return
-		}
+			if r.URL.Path == "/auth/token" {
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"token":"x","access_token":"y"}`))
+				return
+			}
 
-		w.WriteHeader(http.StatusPaymentRequired)
+			if r.URL.Path == "/v2/_catalog" {
+				switch catalogPages {
+				case 0:
+					w.Header().Add("Content-Type", "application/json; charset=utf-8")
+					_, _ = w.Write([]byte(`{"repositories": [""]}`))
+				case 1:
+				default:
+					w.Header().Set("Link", `</v2/_catalog?last=x&n=100>; rel="next"`)
+				}
+				w.Header().Add("Content-Type", "application/json; charset=utf-8")
+				_, _ = w.Write([]byte(`{"repositories": ["x"]}`))
+				return
+			}
+
+			if r.URL.Path == "/api/v0/repositories/" {
+				w.Header().Add("Content-Type", "application/json; charset=utf-8")
+
+				switch r.URL.Query().Get("pageStart") {
+				case "":
+					w.Header().Add("X-Next-Page-Start", "0000-repo2")
+					_, _ = w.Write([]byte(`{"repositories":[{"namespace":"project2","name":"repo1"}]}`))
+				case "0000-repo2":
+					_, _ = w.Write([]byte(`{"repositories":[{"namespace":"project2","name":"repo2"},{"namespace":"project3","name":"repo1"},{"namespace":"project3","name":"repo2"},{"namespace":"project4","name":"repo1"},{"namespace":"project4","name":"repo2"}]}`))
+				}
+
+				return
+			}
+
+			w.WriteHeader(http.StatusPaymentRequired)
+		}
 	}
 }
 

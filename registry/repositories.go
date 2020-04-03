@@ -60,7 +60,7 @@ func (registry *Registry) StreamRepositories(ctx context.Context) (<-chan string
 					//
 					// If the fallback fails, we'll assume that there are legitimately 0 repositories and return
 					// without an error.
-					if !gotSome && len(response.Repositories) == 0 {
+					if !gotSome && len(response.Repositories) == 0 || registry.isDTR() {
 						_ = registry.tryFallback(ctx, regChan, errChan)
 						return
 					}
@@ -68,6 +68,15 @@ func (registry *Registry) StreamRepositories(ctx context.Context) (<-chan string
 					return
 
 				case nil:
+					// DTR is tricky. Sometimes it will respond to the _catalog API request with some repositories,
+					// but the list it gives is incomplete. If we have detected that the registry is DTR, then throw
+					// away the _catalog API response and try the fallback, which will use /api/v0/repositories
+					// instead.
+					if registry.isDTR() {
+						_ = registry.tryFallback(ctx, regChan, errChan)
+						return
+					}
+
 					gotSome = true
 					if !streamRegistryAPIRepositoriesPage(ctx, regChan, response.Repositories) {
 						return

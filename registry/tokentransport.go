@@ -13,7 +13,8 @@ type TokenTransport struct {
 	Username  string
 	Password  string
 
-	token string
+	token       string
+	authService *authService
 }
 
 func (t *TokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -30,6 +31,7 @@ func (t *TokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		resp, err = t.authAndRetry(authService, req)
+		t.authService = authService
 	}
 	return resp, err
 }

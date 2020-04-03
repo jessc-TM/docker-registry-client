@@ -121,6 +121,19 @@ func (r *Registry) useBasicPreAuth() {
 	}
 }
 
+// isDTR attempts to detect if the registry is DTR; the only hint we get is if during the
+// authentication process we got `service="dtr"` in the OAuth challenge.
+func (r *Registry) isDTR() bool {
+	if errorTransport, ok := r.Client.Transport.(*ErrorTransport); ok {
+		if basicAuthTransport, ok := errorTransport.Transport.(*BasicTransport); ok {
+			if tokenTransport, ok := basicAuthTransport.Transport.(*TokenTransport); ok {
+				return tokenTransport.authService != nil && tokenTransport.authService.Service == "dtr"
+			}
+		}
+	}
+	return false
+}
+
 func (r *Registry) url(pathTemplate string, args ...interface{}) string {
 	pathSuffix := fmt.Sprintf(pathTemplate, args...)
 	url := fmt.Sprintf("%s%s", r.URL, pathSuffix)
