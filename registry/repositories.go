@@ -5,6 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
+)
+
+var (
+	harborAPIv2Pattern = regexp.MustCompile(`\/api\/v2.0\/projects\/`)
 )
 
 type repositoriesResponse struct {
@@ -145,6 +150,9 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 				registry.useBasicPreAuth()
 
 				regurl = registry.url("/api/projects")
+
+				var harborProjRepo string = "/api/repositories?project_id="
+
 				registry.Logf("got error %v, attempting Harbor fallback at %v", err2, regurl)
 				gotSome := false
 				for {
@@ -160,11 +168,11 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 						switch err3 {
 						case ErrNoMorePages:
 							gotSome = true
-							streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects)
+							streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, harborProjRepo)
 							return nil
 						case nil:
 							gotSome = true
-							if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects) {
+							if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, harborProjRepo) {
 								return nil
 							}
 							continue
@@ -175,8 +183,47 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 								return nil
 							}
 
-							// the fallbacks didn't work, return the original error
-							return fmt.Errorf("fallback didn't work")
+							// the fallbacks didn't work, try Harbor V2 fallback
+							regurl = registry.url("/api/v2.0/projects")
+
+							// set GET URL to be used later
+							var harborProjRepo string = "/api/v2.0/projects/"
+
+							registry.Logf("got error %v, attempting Harbor V2 fallback at %v", err2, regurl)
+							gotSome = false
+							for {
+								var err3 error
+								select {
+								case <-ctx.Done():
+									return ctx.Err()
+								default:
+									harborProjects := []harborProject{}
+
+									regurl, err3 = registry.getPaginatedJson(regurl, &harborProjects)
+
+									switch err3 {
+									case ErrNoMorePages:
+										gotSome = true
+										streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, harborProjRepo)
+										return nil
+									case nil:
+										gotSome = true
+										if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, harborProjRepo) {
+											return nil
+										}
+										continue
+									default:
+										if gotSome {
+											// we got something successfully but now we're failing, return the current error
+											errChan <- err3
+											return nil
+										}
+
+										// the fallbacks didn't work, return the original error
+										return fmt.Errorf("fallback didn't work")
+									}
+								}
+							}
 						}
 					}
 				}
@@ -192,8 +239,9 @@ type dtrRepository struct {
 }
 
 type harborProject struct {
-	ID        int `json:"project_id"`
-	RepoCount int `json:"repo_count"`
+	ID        int    `json:"project_id"`
+	RepoCount int    `json:"repo_count"`
+	Name      string `json:"name"`
 	// there are more fields but we don't care about them
 }
 
@@ -226,13 +274,19 @@ func streamDTRAPIRepositoriesPage(ctx context.Context, c chan string, v []dtrRep
 	return true
 }
 
-func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan string, e chan error, v []harborProject) bool {
+func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan string, e chan error, v []harborProject, harborProjRepo string) bool {
 	for _, project := range v {
 		if project.RepoCount <= 0 {
 			continue
 		}
 
-		if !streamHarborProjectRepos(ctx, project, registry, c, e) {
+		if harborAPIv2Pattern.MatchString(harborProjRepo) {
+			harborProjRepo = harborProjRepo + project.Name + "/repositories"
+		} else {
+			harborProjRepo = harborProjRepo + fmt.Sprint(project.ID)
+		}
+
+		if !streamHarborProjectRepos(ctx, project, registry, c, e, harborProjRepo) {
 			return false
 		}
 	}
@@ -240,8 +294,8 @@ func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan st
 	return true
 }
 
-func streamHarborProjectRepos(ctx context.Context, project harborProject, registry *Registry, c chan string, e chan error) bool {
-	u := registry.url(fmt.Sprintf("/api/repositories?project_id=%d", project.ID))
+func streamHarborProjectRepos(ctx context.Context, project harborProject, registry *Registry, c chan string, e chan error, harborProjRepo string) bool {
+	u := registry.url(harborProjRepo)
 
 	for {
 		var err error
