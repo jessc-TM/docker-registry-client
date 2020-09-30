@@ -270,9 +270,9 @@ func streamDTRAPIRepositoriesPage(ctx context.Context, c chan string, v []dtrRep
 }
 
 func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan string, e chan error, v []harborProject, harborAPIURL string) bool {
-	var harborProjRepoURL string = ""
-
 	for _, project := range v {
+		var harborProjRepoURL string = ""
+
 		if project.RepoCount <= 0 {
 			continue
 		}
