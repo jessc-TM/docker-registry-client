@@ -272,12 +272,15 @@ func streamDTRAPIRepositoriesPage(ctx context.Context, c chan string, v []dtrRep
 func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan string, e chan error, v []harborProject, harborAPIURL string) bool {
 	for _, project := range v {
 		var harborProjRepoURL string = ""
+		fmt.Println("harborProjRepoURL initially: " + harborProjRepoURL)
 
 		if project.RepoCount <= 0 {
 			continue
 		}
 
+		fmt.Println("HarborAPIURL " + harborAPIURL)
 		if harborAPIv2Pattern.MatchString(harborAPIURL) {
+			fmt.Println("V2 here")
 			harborProjRepoURL = harborAPIURL + "/" + project.Name + "/repositories"
 		} else {
 			// It must be Harbor V1
@@ -285,6 +288,8 @@ func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan st
 		}
 
 		if !streamHarborProjectRepos(ctx, project, registry, c, e, harborProjRepoURL) {
+			fmt.Println("false")
+			fmt.Println("after false: " + harborProjRepoURL)
 			return false
 		}
 	}
