@@ -292,8 +292,9 @@ func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan st
 	return true
 }
 
-func streamHarborProjectRepos(ctx context.Context, project harborProject, registry *Registry, c chan string, e chan error, harborAPIURL string) bool {
-	u := registry.url(harborAPIURL)
+func streamHarborProjectRepos(ctx context.Context, project harborProject, registry *Registry, c chan string, e chan error, harborProjRepoURL string) bool {
+	u := registry.url(harborProjRepoURL)
+	fmt.Println("Hello " + harborProjRepoURL)
 
 	for {
 		var err error
