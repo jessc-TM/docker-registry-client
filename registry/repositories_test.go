@@ -11,7 +11,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/heroku/docker-registry-client/registry"
+	"github.com/jessc-TM/docker-registry-client/registry"
 )
 
 type regErrors struct {
