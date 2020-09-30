@@ -150,6 +150,7 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 				registry.useBasicPreAuth()
 
 				regurl = registry.url("/api/projects")
+				var harborAPIURL string = regurl
 
 				registry.Logf("got error %v, attempting Harbor fallback at %v", err2, regurl)
 				gotSome := false
@@ -166,11 +167,11 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 						switch err3 {
 						case ErrNoMorePages:
 							gotSome = true
-							streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, regurl)
+							streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, harborAPIURL)
 							return nil
 						case nil:
 							gotSome = true
-							if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, regurl) {
+							if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, harborAPIURL) {
 								return nil
 							}
 							continue
@@ -183,6 +184,7 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 
 							// the fallbacks didn't work, try Harbor V2 fallback
 							regurl = registry.url("/api/v2.0/projects")
+							var harborAPIURL string = regurl
 
 							registry.Logf("got error %v, attempting Harbor V2 fallback at %v", err2, regurl)
 							gotSome = false
@@ -199,11 +201,11 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 									switch err3 {
 									case ErrNoMorePages:
 										gotSome = true
-										streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, regurl)
+										streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, harborAPIURL)
 										return nil
 									case nil:
 										gotSome = true
-										if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, regurl) {
+										if !streamHarborProjectsPage(ctx, registry, regChan, errChan, harborProjects, harborAPIURL) {
 											return nil
 										}
 										continue
