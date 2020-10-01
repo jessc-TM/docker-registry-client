@@ -150,7 +150,7 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 				registry.useBasicPreAuth()
 
 				regurl = registry.url("/api/projects")
-				var harborAPIURL string = regurl
+				var harborAPIURL string = "/api/repositories?project_id="
 
 				registry.Logf("got error %v, attempting Harbor fallback at %v", err2, regurl)
 				gotSome := false
@@ -184,7 +184,7 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 
 							// the fallbacks didn't work, try Harbor V2 fallback
 							regurl = registry.url("/api/v2.0/projects")
-							var harborAPIURL string = regurl
+							var harborAPIURL string = "/api/v2.0/projects"
 
 							registry.Logf("got error %v, attempting Harbor V2 fallback at %v", err2, regurl)
 							gotSome = false
@@ -288,7 +288,7 @@ func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan st
 			harborProjRepoURL = harborAPIURL + "/" + project.Name + "/repositories"
 		} else {
 			// It must be Harbor V1
-			harborProjRepoURL = "/api/repositories?project_id=" + fmt.Sprint(project.ID)
+			harborProjRepoURL = harborAPIURL + fmt.Sprint(project.ID)
 		}
 
 		if !streamHarborProjectRepos(ctx, project, registry, c, e, harborProjRepoURL) {
@@ -302,7 +302,7 @@ func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan st
 }
 
 func streamHarborProjectRepos(ctx context.Context, project harborProject, registry *Registry, c chan string, e chan error, harborProjRepoURL string) bool {
-	u := harborProjRepoURL
+	u := registry.url(harborProjRepoURL)
 	fmt.Println("Hello " + harborProjRepoURL)
 	fmt.Println("Hello 2" + u)
 
