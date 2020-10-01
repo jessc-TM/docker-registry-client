@@ -188,6 +188,7 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 
 							registry.Logf("got error %v, attempting Harbor V2 fallback at %v", err2, regurl)
 							gotSome = false
+							fmt.Println("hello from fallback " + harborAPIURL)
 							for {
 								var err3 error
 								select {
@@ -197,7 +198,7 @@ func (registry *Registry) tryFallback(ctx context.Context, regChan chan string, 
 									harborProjects := []harborProject{}
 
 									regurl, err3 = registry.getPaginatedJson(regurl, &harborProjects)
-
+									fmt.Println("hello from fallback " + harborAPIURL)
 									switch err3 {
 									case ErrNoMorePages:
 										gotSome = true
@@ -275,6 +276,7 @@ func streamHarborProjectsPage(ctx context.Context, registry *Registry, c chan st
 	for _, project := range v {
 		var harborProjRepoURL string = ""
 		fmt.Println("harborProjRepoURL initially: " + harborProjRepoURL)
+		fmt.Println("Harbor API URL param initially: " + harborAPIURL)
 
 		if project.RepoCount <= 0 {
 			continue
