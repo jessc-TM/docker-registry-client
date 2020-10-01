@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	harborAPIv2Pattern = regexp.MustCompile(`\/api\/v2\.0\/projects`)
+	harborAPIv2Pattern = regexp.MustCompile(`/api/v2\.0/projects`)
 )
 
 type repositoriesResponse struct {
