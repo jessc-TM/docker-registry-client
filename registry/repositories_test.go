@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/heroku/docker-registry-client/registry"
@@ -47,6 +49,11 @@ func Test_Registry_Repositories(t *testing.T) {
 		{
 			name:     "harbor",
 			handler:  harborDataSource,
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
+		{
+			name:     "harbor v2.0",
+			handler:  harborV2DataSource,
 			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
 		},
 	}
@@ -240,6 +247,97 @@ func harborDataSource(t *testing.T) func(w http.ResponseWriter, r *http.Request)
 				w.Write([]byte(fmt.Sprintf(`[{"name":"project%v/repo%v"}]`, projectID, page)))
 			default:
 				t.Errorf("code asked for project %v but we never mentioned that", projectID)
+				w.WriteHeader(http.StatusNotFound)
+			}
+
+			return
+		}
+
+		t.Error(r.URL.Path)
+		w.WriteHeader(http.StatusPaymentRequired)
+	}
+}
+
+func harborV2DataSource(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		listRepositoriesURL := regexp.MustCompile(`/api/v2\.0/projects/project[1-4]/repositories`)
+
+		log.Printf("harborV2 test handler got request for %v", r.URL.String())
+
+		if r.URL.Path == "/v2/_catalog" {
+			w.WriteHeader(http.StatusUnauthorized)
+
+			buf, _ := json.Marshal(&regErrors{
+				Errors: []regError{
+					{
+						Code:    "UNAUTHORIZED",
+						Message: "authentication required",
+					},
+				},
+			})
+			w.Write(buf)
+
+			return
+		}
+
+		if r.URL.Path == "/api/v0/repositories/" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		// Harbor V1 request URL
+		if r.URL.Path == "/api/projects" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if r.URL.Path == "/api/v2.0/projects" {
+			if h, ok := r.Header["Authorization"]; !ok || len(h) < 1 || h[0] != "Basic dXNlcjpwYXNz" {
+				w.WriteHeader(http.StatusForbidden)
+				t.Fatal("should use basic pre-auth for Harbor")
+				return
+			}
+
+			w.Header()["Link"] = []string{fmt.Sprint(`</api/v2.0/projects`)}
+
+			w.WriteHeader(http.StatusOK)
+
+			w.Write([]byte(`[
+				{"project_id":1, "repo_count":0, "name":"project1"},
+				{"project_id":2, "repo_count":2, "name":"project2"},
+				{"project_id":3, "repo_count":2, "name":"project3"},
+				{"project_id":4, "repo_count":2, "name":"project4"}]`))
+
+			return
+		}
+
+		/* check if any of the API requests match
+		* /api/v2.0/projects/project1/repositories
+		* /api/v2.0/projects/project2/repositories
+		* ... etc
+		 */
+		if listRepositoriesURL.MatchString(r.URL.Path) {
+			if h, ok := r.Header["Authorization"]; !ok || len(h) < 1 || h[0] != "Basic dXNlcjpwYXNz" {
+				w.Header().Set("WWW-Authenticate", "Basic")
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+
+			// determine which project was sent by removing the characters surrounding the project name
+			// resulting string would be equal to project1, project2, etc.
+			projectName := strings.Replace(r.URL.Path, "/api/v2.0/projects/", "", 1)
+			projectName = strings.Replace(projectName, "/repositories", "", 1)
+
+			switch projectName {
+			case "project1":
+				t.Errorf("project 1 has 0 repos and was called for the repo list but should not have been")
+				w.WriteHeader(http.StatusNotFound)
+				return
+			case "project2", "project3", "project4":
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(fmt.Sprintf(`[{"name":"%v/repo1"},{"name":"%v/repo2"}]`, projectName, projectName)))
+			default:
+				t.Errorf("code asked for project %v but we never mentioned that", projectName)
 				w.WriteHeader(http.StatusNotFound)
 			}
 
