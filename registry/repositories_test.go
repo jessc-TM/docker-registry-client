@@ -49,6 +49,11 @@ func Test_Registry_Repositories(t *testing.T) {
 			handler:  harborDataSource,
 			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
 		},
+		{
+			name:     "harbor v2.0",
+			handler:  harborV2DataSource,
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -130,6 +135,128 @@ func dtrDataSource(catalogPages int) func(t *testing.T) func(w http.ResponseWrit
 }
 
 func harborDataSource(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("test handler got request for %v", r.URL.String())
+
+		if r.URL.Path == "/v2/_catalog" {
+			w.WriteHeader(http.StatusUnauthorized)
+
+			buf, _ := json.Marshal(&regErrors{
+				Errors: []regError{
+					{
+						Code:    "UNAUTHORIZED",
+						Message: "authentication required",
+					},
+				},
+			})
+			w.Write(buf)
+
+			return
+		}
+
+		if r.URL.Path == "/api/v0/repositories/" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if r.URL.Path == "/api/projects" {
+			if h, ok := r.Header["Authorization"]; !ok || len(h) < 1 || h[0] != "Basic dXNlcjpwYXNz" {
+				w.WriteHeader(http.StatusForbidden)
+				t.Fatal("should use basic pre-auth for Harbor")
+				return
+			}
+
+			var nextPage string
+			page := r.URL.Query().Get("page")
+			pageSize := r.URL.Query().Get("page_size")
+
+			if pageSize == "" {
+				pageSize = "100"
+			}
+
+			switch page {
+			case "":
+				nextPage = "2"
+			case "2":
+				nextPage = ""
+			default:
+				t.Errorf("Invalid page number %v", page)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+
+			if nextPage != "" {
+				w.Header()["Link"] = []string{fmt.Sprintf(`</api/projects?page=%v&page_size=%v>; rel="next"`, nextPage, pageSize)}
+			}
+
+			w.WriteHeader(http.StatusOK)
+
+			switch page {
+			case "":
+				w.Write([]byte(`[{"project_id":1, "repo_count":0},{"project_id":2, "repo_count":2},{"project_id":3, "repo_count":2}]`))
+			case "2":
+				w.Write([]byte(`[{"project_id":4, "repo_count":2}]`))
+			}
+
+			return
+		}
+
+		if r.URL.Path == "/api/repositories" {
+			if h, ok := r.Header["Authorization"]; !ok || len(h) < 1 || h[0] != "Basic dXNlcjpwYXNz" {
+				w.Header().Set("WWW-Authenticate", "Basic")
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+
+			var nextPage string
+
+			projectID := r.URL.Query().Get("project_id")
+
+			page := r.URL.Query().Get("page")
+			pageSize := r.URL.Query().Get("page_size")
+
+			if pageSize == "" {
+				pageSize = "100"
+			}
+
+			switch page {
+			case "", "1":
+				page = "1"
+				nextPage = "2"
+			case "2":
+				nextPage = ""
+			default:
+				t.Errorf("Invalid page number %v", page)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+
+			if nextPage != "" {
+				w.Header()["Link"] = []string{fmt.Sprintf(`</api/repositories?project_id=%v&page=%v&page_size=%v>; rel="next"`, projectID, nextPage, pageSize)}
+			}
+
+			switch projectID {
+			case "1":
+				t.Errorf("project 1 has 0 repos and was called for the repo list but should not have been")
+				w.WriteHeader(http.StatusNotFound)
+				return
+			case "2", "3", "4":
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(fmt.Sprintf(`[{"name":"project%v/repo%v"}]`, projectID, page)))
+			default:
+				t.Errorf("code asked for project %v but we never mentioned that", projectID)
+				w.WriteHeader(http.StatusNotFound)
+			}
+
+			return
+		}
+
+		t.Error(r.URL.Path)
+		w.WriteHeader(http.StatusPaymentRequired)
+	}
+}
+
+func harborV2DataSource(t *testing.T) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("test handler got request for %v", r.URL.String())
 
