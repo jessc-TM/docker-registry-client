@@ -31,26 +31,26 @@ func Test_Registry_Repositories(t *testing.T) {
 		handler  func(t *testing.T) func(w http.ResponseWriter, r *http.Request)
 		expected []string
 	}{
-		// {
-		// 	name:     "dtr with 0 repositories in the _catalog response",
-		// 	handler:  dtrDataSource(0),
-		// 	expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
-		// },
-		// {
-		// 	name:     "dtr with 1 page in the _catalog response",
-		// 	handler:  dtrDataSource(1),
-		// 	expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
-		// },
-		// {
-		// 	name:     "dtr with multiple pages in the _catalog response",
-		// 	handler:  dtrDataSource(2),
-		// 	expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
-		// },
-		// {
-		// 	name:     "harbor",
-		// 	handler:  harborDataSource,
-		// 	expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
-		// },
+		{
+			name:     "dtr with 0 repositories in the _catalog response",
+			handler:  dtrDataSource(0),
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
+		{
+			name:     "dtr with 1 page in the _catalog response",
+			handler:  dtrDataSource(1),
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
+		{
+			name:     "dtr with multiple pages in the _catalog response",
+			handler:  dtrDataSource(2),
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
+		{
+			name:     "harbor",
+			handler:  harborDataSource,
+			expected: []string{"project2/repo1", "project2/repo2", "project3/repo1", "project3/repo2", "project4/repo1", "project4/repo2"},
+		},
 		{
 			name:     "harbor v2.0",
 			handler:  harborV2DataSource,
